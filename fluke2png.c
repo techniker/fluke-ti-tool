@@ -14,12 +14,16 @@
 #include <unistd.h>
 #include <png.h>
 #include <arpa/inet.h>
+#include <math.h>
 
-struct header {
+struct header
+{
+    // the meaning of the individual header bytes is unknown
 };
 
 // struct to save minimal and maximal pixel value
-struct extrema {
+struct extrema
+{
     uint16_t min;
     uint16_t max;
 };
@@ -28,33 +32,47 @@ struct extrema {
  * Print data as hexdump,
  * just like the console utility hexdump does
  */
-static void hexdump(const uint8_t *data, unsigned int len)
+static void hexdump(struct header *data, unsigned int len)
 {
     const uint8_t *bufptr = data;
     const uint8_t const *endptr = bufptr + len;
-    unsigned int n, m, o, p;
-    int hexchr;
+    int hexchr, m, n, o;
 
-    for (n=0; n < len; n+=32, bufptr += 32) {
+    // line by line
+    for (n=0; n < len; n+=32, bufptr += 32)
+    {
+        // 8 blocks of 4 bytes per line
+        // = 32 bytes, except end of buffer is reached
         hexchr = 0;
-        for(m = 0; m < 32 && bufptr < endptr; m++, bufptr++) {
-            if((m) && !(m%4)) {
+        for (m = 0; m < 32 && bufptr < endptr; m++, bufptr++)
+        {
+            // after every 4*2 bytes insert 1 space
+            if ((m) && !(m%4))
+            {
                 putchar(' ');
                 hexchr++;
             }
+            // print current buffer position as hex  
             printf("%02x", *bufptr);
             hexchr+=2;
         }
-        bufptr -= m;
-        p = 71 - hexchr;
-        for(o = 0; p < p; p++) {
-            putchar(' ');
-        }
+        
+        // if end of buffer, pad to line end with spaces
+        if (bufptr >= endptr)
+            for (o = m*2+floor(m/4); o < 71; o++)
+                printf(" ");
 
+        // go back to current line's start position
+        bufptr -= m;
+
+        // put at least one space between hex and printable bytes
         putchar(' ');
 
-        for(m = 0; m < 32 && bufptr < endptr; m++, bufptr++) {
-            if(isgraph(*bufptr)) {
+        // print printable chars, else dots
+        for (m = 0; m < 32 && bufptr < endptr; m++, bufptr++)
+        {
+            if (isgraph(*bufptr))
+            {
                 putchar(*bufptr);
             } else {
                 putchar('.');
@@ -74,20 +92,19 @@ void *readblob(FILE *in, size_t size)
     void *res = malloc(size);
     size_t rd;
 
-    printf("readblob %d\n", size);
-
     rd = fread(res, 1, size, in);
-    if(rd != size) {
-        if(ferror(in)) {
+    if (rd != size)
+    {
+        if (ferror(in))
+        {
             puts("Read failed. Insufficient permissions?");
-        } else if (feof(in)) {
+        } else if (feof(in))
+        {
             puts("Read failed: File to short");
         }
         exit(1);
     }
-
-    puts("done.");
-
+    
     return res;
 }
 
@@ -102,15 +119,16 @@ void findMinMax(struct extrema *res, uint16_t *data, size_t width, size_t height
 
     // iterate through all pixels
     int x, y;
-    for(y = 0; y < height; y++) {
-        for(x = 0; x < width; x++) {
-
+    for (y = 0; y < height; y++)
+    {
+        for (x = 0; x < width; x++)
+        {
             // get pixel value at coordinate (x,y)
             uint16_t px = data[(y * width) + x];
             uint16_t vl = ntohs(px);
 
             // adjust min/max
-            if(vl < min)
+            if (vl < min)
             {
                 min = vl;
             }
@@ -139,10 +157,12 @@ void adjustMinMax(struct extrema *res, uint16_t *data, size_t width, size_t heig
     float scale = ((float)UINT16_MAX) / range;
 
     // iterate through all pixels
-    int x, y;
-    for(y = 0; y < height; y++) {
-        for(x = 0; x < width; x++) {
-            int pos = (y * width) + x;
+    int x, y, pos;
+    for (y = 0; y < height; y++)
+    {
+        for (x = 0; x < width; x++)
+        {
+            pos = (y * width) + x;
             
             // get pixel value at (x,y)
             uint16_t px = data[pos];
@@ -174,24 +194,26 @@ int writepng(char *fname, uint16_t *data, size_t width, size_t height)
 
     // open file for writing
     fp = fopen(fname, "wb");
-    if(!fp) {
+    if (!fp)
         return -1;
-    }
 
     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if(!png_ptr) {
+    if (!png_ptr)
+    {
         fclose(fp);
         return -1;
     }
 
     info_ptr = png_create_info_struct(png_ptr);
-    if(!info_ptr) {
+    if (!info_ptr)
+    {
         png_destroy_write_struct(&png_ptr, NULL);
         fclose(fp);
         return -1;
     }
 
-    if (setjmp(png_jmpbuf(png_ptr))) {
+    if (setjmp(png_jmpbuf(png_ptr)))
+    {
         png_destroy_write_struct(&png_ptr, &info_ptr);
         fclose(fp);
         return -1;
@@ -246,36 +268,40 @@ int main(int argc, char **argv)
     size_t want;
 
     // check console argument count
-    if(argc != 3) {
-        printf("Usage: %s <is2-input> <png-output>\n", argv[0]);
+    if (argc != 3)
+    {
+        printf("Usage: %s <input filename.is2> <output filename.png>\n", argv[0]);
         exit(1);
     }
 
     // open input file
     in = fopen(argv[1], "rb");
-    if(!in) {
-        perror("fopen");
+    if (!in)
+    {
+        perror("Fatal: Could not open input file");
         exit(1);
     }
 
     // read IS2 header: 366 bytes
+    puts("Reading header ...");
     want = 366;
     imghead = readblob(in, want);
-    puts("Header m1");
     hexdump(imghead, want);
 
     // read image data: 160x120 pixel, color depth: 16-bit
+    puts("Reading image data ...");
     want = 160 * 120 * 2;
     imgdata = readblob(in, want);
-    puts("Image");
 //    hexdump(imgdata, want);
 
     findMinMax(&ar, imgdata, 160, 120);
-    printf("Minimal pixel value: %x\nMaximal pixel value %x\n", ar.min, ar.max);
-    puts("Adjusting...");
+    printf("Minimal pixel value: 0x%04x\nMaximal pixel value: 0x%04x\n", ar.min, ar.max);
+
+    puts("Adjusting value range ...");
     adjustMinMax(&ar, imgdata, 160, 120);
 
-    // export image as black and white PNG 
+    // export image as black and white PNG
+    puts("Exporting PNG ..."); 
     writepng(argv[2], imgdata, 160, 120);
 
     return 0;
