@@ -1,0 +1,10 @@
+*.is2
+*.IS2
+*.png
+*.PNG
+*.*~
+.swp*
+*.m
+*.zip
+is2png
+main
