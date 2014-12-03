@@ -15,6 +15,7 @@
 #include <png.h>
 #include <arpa/inet.h>
 #include <math.h>
+#include <string.h>
 
 struct header
 {
